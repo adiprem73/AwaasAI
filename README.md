@@ -121,7 +121,7 @@ Mom usually starts her day around **7 AM**, opening the curtains, making tea, an
 Not every alert is an emergency—sometimes it's simply peace of mind for families caring for loved ones from a distance.
 
 #### 4. 🪟 An open window after midnight
-The bedroom window is still open at 23:30 (night window 22:00–06:00). → `unsafe_at_night`. With an elderly resident alone, it's a **security concern** → *"I've closed and locked the window and notified the family."*
+The bedroom window is still open at 23:30 (night window 22:00–06:00). → `unsafe_at_night`. With an elderly resident alone, it's a **security concern** → *"I've closed and locked the window and notified the family."* This way Thefts & Robberies can be easily prevented further ensuring safety of the family.
 
 #### 5. 💡 Rushed out, fan still running
 The son's room fan is still ON, hours past its learned 9:00 AM OFF time. → `device_left_on`. A gentle suggestion appears on the Patterns dashboard.
@@ -171,7 +171,7 @@ flowchart LR
     class L,OUT out;
 ```
 
-**The two deepest rings — the Pattern Engine and the Safety Overlay — are explained next.**
+**Next we explain our three strongest features: Pattern Recognition Engine, Mood & Cognitive Load Engine, and Adaptive Safety Intelligence**
 
 ---
 
