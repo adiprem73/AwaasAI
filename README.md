@@ -28,7 +28,7 @@
 3. [🌍 Real-World Scenarios](#-real-world-scenarios)
 4. [⚙️ How It Works](#️-how-it-works)
 5. [📊 Pattern Recognition Engine](#-pattern-recognition-engine)
-6. [� Mood & Cognitive-Load Engine](#-mood--cognitive-load-engine)
+6. [😄 Mood & Cognitive-Load Engine](#-mood--cognitive-load-engine)
 7. [🛡️ Adaptive Safety Intelligence](#️-adaptive-safety-intelligence)
 8. [🏛️ Architecture](#️-architecture)
 9. [🧰 Tech Stack](#-tech-stack)
@@ -110,19 +110,20 @@ A **vulnerability-aware overlay** that re-reads every concern by *who's home*. P
 
 > *Each scenario is a real, runnable demo in the app.*
 
-#### 1. 😮‍💨 "I'm fine." *(but you're not)*
-You tell Alexa you're fine, but you're scrolling fast and tapping hard. **Behaviour overrides speech** → the room dims to a calm blue, lo-fi plays softly, notifications go quiet.
+#### 1. 😮‍💨 "I'm fine." *(but you're clearly having a rough day)*
+You say you're okay, but your actions tell a different story. You're scrolling restlessly, tapping harder than usual, and moving around the house less. → Behaviour speaks louder than words. The lights soften, calming music fades in, and distractions are quietly reduced.
 
 #### 2. 🔥 The forgotten gas stove
-The kitchen gas stove has been running **70 minutes** — usual is ~20. Pattern engine flags `duration_exceeded`. Grandma is home alone (×2.0) → escalated to **critical**. *"The gas stove has been left on far too long — I'm shutting it off and alerting the family."*
+Dinner was finished long ago, but the stove is still burning. It's been on for over an hour, far longer than usual. → `Duration anomaly detected`. Since Grandma is home alone, the situation is treated as **critical**. *"The stove appears to have been left on. I'm turning it off and notifying the family."*
 
-#### 3. 👵 The silent morning
-Grandpa usually moves around by 6:30 AM. It's now past his window with **no activity ping**. → `inactivity` anomaly → **Care Alert**. The family is notified before anyone even worries.
+#### 3. 👵 Looking after elderly parents, even from afar
+Mom usually starts her day around **7 AM**, opening the curtains, making tea, and moving through the house. Today, her routine is `noticeably different`. → Pattern deviation detected. A gentle check-in notification is sent to the family: *"Your mother's morning routine seems unusual today. Would you like to check in?"*
+Not every alert is an emergency—sometimes it's simply peace of mind for families caring for loved ones from a distance.
 
-#### 4. 🪟 An open window at midnight
+#### 4. 🪟 An open window after midnight
 The bedroom window is still open at 23:30 (night window 22:00–06:00). → `unsafe_at_night`. With an elderly resident alone, it's a **security concern** → *"I've closed and locked the window and notified the family."*
 
-#### 5. 💡 Rushed out, fan left on
+#### 5. 💡 Rushed out, fan still running
 The son's room fan is still ON, hours past its learned 9:00 AM OFF time. → `device_left_on`. A gentle suggestion appears on the Patterns dashboard.
 
 #### 6. 🆘 A fall at 3 AM
@@ -234,7 +235,7 @@ A pattern is kept only if it occurs **≥ 3 times** *and* scores **≥ 0.6**. No
 
 ---
 
-## 😌 Mood & Cognitive-Load Engine
+## 😄 Mood & Cognitive-Load Engine
 
 This is the **feeling** half of Awaas AI. Two services work together — one reads
 *what you say*, the other reads *how you behave* — and the orchestrator fuses
