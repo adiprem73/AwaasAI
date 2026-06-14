@@ -288,7 +288,146 @@ Starts at **100**, deducts per escalated anomaly → `low −4` · `medium −12
 
 ## 🏛️ Architecture
 
-A **microservices** platform behind an API Gateway — the same model AWS ALB path-routing would use in production.
+Awaas AI is a **microservices** platform. In production it runs as an
+auto-scaling fleet on AWS; locally it runs as the same services behind a FastAPI
+gateway. Both views are shown below.
+
+### Production architecture (AWS)
+
+Request flows left → right through six layers: **clients → auth → load balancer
+→ compute → AI & data → outputs**.
+
+```mermaid
+flowchart LR
+    %% ─── 1 · Clients ───
+    subgraph C["1 · CLIENTS"]
+        direction TB
+        MOB["📱 Mobile App"]
+        WEB["🌐 Web App"]
+        ALX["🔊 Alexa /<br/>Voice Assistant"]
+    end
+
+    %% ─── 2 · Auth + Entry ───
+    subgraph A["2 · AUTH + ENTRY"]
+        direction TB
+        COG["🔐 Amazon Cognito<br/>JWT auth · user pools"]
+        APIGW["🚪 API Gateway<br/>JWT validation · rate limiting · routing"]
+    end
+
+    %% ─── 3 · Load Balancer ───
+    subgraph LB["3 · LOAD BALANCER"]
+        ALB["⚖️ Application Load Balancer<br/>path routing · health checks · auto scaling"]
+    end
+
+    %% ─── 4 · EC2 Auto Scaling Group ───
+    subgraph EC2["4 · EC2 INSTANCES · Auto Scaling Group"]
+        direction TB
+        I1["🟢 Instance 1 · Mood Analysis<br/>Voice/Text → Whisper STT → LLM mood"]
+        I2["🔵 Instance 2 · Behavior Analysis<br/>Scroll · Tap · Idle · Swipe → cognitive load"]
+        I3["🟠 Instance 3 · Device Pattern Engine<br/>learns routines · detects anomalies"]
+        I4["🔴 Instance 4 · Safety Intelligence<br/>vulnerable monitoring · scoring · alerts"]
+        I5["🟣 Instance 5 · Orchestrator<br/>collects signals → LLM reasoning → actions"]
+        CACHE[("⚡ DynamoDB Cache<br/>native TTL · per instance")]
+    end
+
+    %% ─── 5 · AI & Data ───
+    subgraph AID["5 · AI & DATA"]
+        direction TB
+        BR["🧠 NVIDIA Nemotron 3 Super 120B<br/>primary · via AWS Bedrock"]
+        GQ["🧠 Groq LLaMA 3.3 70B<br/>fallback"]
+        DDB[("🗄️ Amazon DynamoDB<br/>Events · Patterns · State<br/>Mood History · Safety Profiles")]
+        S3[("🪣 Amazon S3<br/>logs · voice files")]
+    end
+
+    %% ─── 6 · Outputs ───
+    subgraph OUT["6 · OUTPUTS"]
+        direction TB
+        O1["💡 Adjust Ambience<br/>lights · music · temperature"]
+        O2["🔔 Notifications<br/>Alexa voice · mobile push"]
+        O3["🏠 Device Control<br/>on / off / schedule"]
+        O4["🚨 Emergency Alerts<br/>family / caregivers"]
+    end
+
+    %% ─── Flow ───
+    MOB --> COG
+    WEB --> COG
+    ALX --> COG
+    COG --> APIGW --> ALB
+    ALB --> I1 & I2 & I3 & I4 & I5
+    I1 --> CACHE
+    I2 --> CACHE
+    I3 --> CACHE
+    I4 --> CACHE
+    I1 -. signals .-> I5
+    I2 -. signals .-> I5
+    I3 -. signals .-> I5
+    I4 -. signals .-> I5
+    I5 -->|primary| BR
+    I5 -. fallback .-> GQ
+    I1 --> DDB
+    I2 --> DDB
+    I3 --> DDB
+    I4 --> DDB
+    I5 --> DDB
+    I1 --> S3
+    I5 --> S3
+    I5 --> O1
+    I5 --> O2
+    I5 --> O3
+    I4 --> O4
+
+    %% ─── Styling ───
+    classDef client fill:#1c2128,stroke:#6e7681,color:#fff;
+    classDef auth fill:#3d2a14,stroke:#ff9900,color:#fff;
+    classDef lb fill:#2d1f3d,stroke:#a371f7,color:#fff;
+    classDef i1 fill:#16301c,stroke:#3fb950,color:#fff;
+    classDef i2 fill:#16263d,stroke:#4a90d9,color:#fff;
+    classDef i3 fill:#3d2c14,stroke:#d99e4a,color:#fff;
+    classDef i4 fill:#3d1820,stroke:#f85149,color:#fff;
+    classDef i5 fill:#2d1f3d,stroke:#a371f7,color:#fff;
+    classDef cache fill:#241a33,stroke:#a371f7,color:#fff;
+    classDef ai fill:#143030,stroke:#2dd4bf,color:#fff;
+    classDef data fill:#16263d,stroke:#4a90d9,color:#fff;
+    classDef out fill:#3d2c14,stroke:#e3b341,color:#fff;
+    class MOB,WEB,ALX client;
+    class COG,APIGW auth;
+    class ALB lb;
+    class I1 i1;
+    class I2 i2;
+    class I3 i3;
+    class I4 i4;
+    class I5 i5;
+    class CACHE cache;
+    class BR,GQ ai;
+    class DDB,S3 data;
+    class O1,O2,O3,O4 out;
+```
+
+**Legend** — `──▶` synchronous flow · `╌╌▶` external / fallback call · `⚡` DynamoDB cache (native TTL).
+
+**Cross-cutting shared services** (observe & support every layer):
+
+| Service | Role |
+|---------|------|
+| 📊 **Amazon CloudWatch** | metrics, logs & alarms across all instances |
+| 🔑 **AWS Secrets Manager** | API keys (Groq), DB creds, Bedrock access |
+| 📣 **Amazon SNS / SES** | emergency alert delivery (SMS / email / push) |
+| 🪣 **Amazon S3** | shared logs & archived voice files |
+
+| AWS layer | Service | Maps to (local) |
+|-----------|---------|-----------------|
+| Clients | Mobile · Web · Alexa | React dashboard `:5173` |
+| Auth + Entry | Cognito + API Gateway | FastAPI gateway `:8000` |
+| Load Balancer | Application Load Balancer | gateway path-routing |
+| Compute (ASG) | 5 EC2 instances | the 6 FastAPI services |
+| AI & Data | Bedrock → Groq · DynamoDB · S3 | Bedrock/Groq · DynamoDB Local |
+| Outputs | Ambience · Notifications · Device control · Emergency alerts | device + narration responses |
+
+---
+
+### Local / codebase architecture
+
+The same services run behind a FastAPI gateway — the model AWS ALB path-routing mirrors in production.
 
 ```mermaid
 flowchart TB
