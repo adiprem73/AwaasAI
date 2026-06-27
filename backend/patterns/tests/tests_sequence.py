@@ -24,7 +24,6 @@ patterns = extract_sequence_patterns(
     "H003",
     events,
 )
-
 print("=" * 80)
 print("Patterns Found:", len(patterns))
 print()

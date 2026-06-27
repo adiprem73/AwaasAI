@@ -64,6 +64,32 @@ COMPRESS_DUPLICATES = True
 # Similarity threshold for graph construction.
 SIMILARITY_THRESHOLD = 0.75
 
+# ── Behavioral-quality constants ─────────────────────────────────────────────
+
+# Events within this many minutes of each other inside a session are treated as
+# functionally simultaneous.  Their order in the event log is determined by
+# sensor polling latency (measurement noise), not by behavioral intent.  We
+# sort them deterministically so that "porch then kitchen" and "kitchen then
+# porch" — the same human action — produce the same canonical signature and
+# collapse into one cluster rather than two mirrored patterns.
+CONCURRENT_WINDOW_MINUTES: float = 2.0
+
+# The "system" sentinel means "no human actor triggered this event."  It is
+# stamped on automation rules, schedules, and firmware reactions.  Treating it
+# as a shared identity would link *every* system-triggered event in a 10-minute
+# window into the same session, which is how "inverter OFF → grandma_medicine
+# TAKEN" gets produced — two unrelated automation events that happen to fire
+# close together.  Excluding "system" from trigger-matching forces sessions to
+# split on room or device overlap instead, which is far more meaningful.
+SYSTEM_TRIGGER: str = "system"
+
+# A behavioral routine involves coordination across multiple physical devices.
+# A single-device ON→OFF cycle is a *duration* observation already handled by
+# the duration engine.  Requiring ≥2 distinct devices in the emitted steps is
+# the simplest semantic filter that removes the entire class of single-device
+# false positives without touching the clustering logic.
+MIN_DISTINCT_DEVICES: int = 2
+
 
 # ============================================================================
 # Internal Session Representation
@@ -210,6 +236,46 @@ def _compress_duplicates(events: list[Event]) -> list[Event]:
 
 
 # ============================================================================
+# Concurrent Event Normalisation  (Fix B)
+# ============================================================================
+
+def _normalize_concurrent_events(events: list[Event]) -> list[Event]:
+    """Sort events within CONCURRENT_WINDOW_MINUTES deterministically.
+
+    Within a short window the ordering of sensor events reflects hardware
+    polling latency, not human intent.  Without this step, "person turns off
+    porch and kitchen lights simultaneously" produces two clusters — one where
+    porch is first and one where kitchen is first — because small jitter causes
+    the timestamps to flip across nights.  Sorting by (device_id, action)
+    within each concurrent group collapses both into the same canonical tuple
+    and therefore the same cluster.
+
+    Groups are built by scanning the sorted-by-timestamp event list and
+    starting a new group whenever the gap to the previous event exceeds
+    CONCURRENT_WINDOW_MINUTES.  Single-event groups are passed through
+    unchanged, so the function is a no-op on already-ordered non-concurrent
+    sessions.
+    """
+    if not events:
+        return []
+
+    groups: list[list[Event]] = [[events[0]]]
+    for ev in events[1:]:
+        gap = (ev.timestamp - groups[-1][-1].timestamp).total_seconds() / 60.0
+        if gap <= CONCURRENT_WINDOW_MINUTES:
+            groups[-1].append(ev)
+        else:
+            groups.append([ev])
+
+    result: list[Event] = []
+    for group in groups:
+        if len(group) > 1:
+            group = sorted(group, key=lambda e: (e.device_id, e.action.value))
+        result.extend(group)
+    return result
+
+
+# ============================================================================
 # Canonical Representation
 # ============================================================================
 
@@ -349,7 +415,15 @@ def _refine_session(
     Device continuations remain together.
     """
 
-    if len(session.events) <= MIN_SEQUENCE_LENGTH:
+    # Use strict less-than: a 2-event session (== MIN_SEQUENCE_LENGTH) must
+    # still be evaluated for splitting.  If its two events belong to different
+    # rooms and different triggers, refinement splits it into two 1-event
+    # sub-sessions; those then fail the length filter in _build_sessions and
+    # are discarded.  The old `<=` guard bypassed this, allowing unrelated
+    # event pairs (e.g. "inverter:OFF utility/system" + "grandma:TAKEN
+    # grandma_room/grandma") to survive as a 2-step sequence simply because
+    # they happened within MAX_GAP_MINUTES of each other.
+    if len(session.events) < MIN_SEQUENCE_LENGTH:
         return [session]
 
     refined: list[_Session] = []
@@ -360,8 +434,13 @@ def _refine_session(
 
     for event in session.events[1:]:
 
+        # Fix A: "system" is a sentinel, not a person.  Letting it act as a
+        # shared-trigger link causes every automation event within MAX_GAP_MINUTES
+        # of another automation event to be pulled into the same session,
+        # producing spurious routines like "inverter OFF → grandma_medicine TAKEN".
         same_trigger = (
-            event.triggered_by in current.triggers
+            event.triggered_by != SYSTEM_TRIGGER
+            and event.triggered_by in current.triggers
         )
 
         same_room = (
@@ -420,7 +499,12 @@ def _should_merge(
     if left.rooms & right.rooms:
         return True
 
-    if left.triggers & right.triggers:
+    # Fix A (merge side): "system" triggers must not re-merge sessions that
+    # _refine_session correctly split.  Strip the sentinel before comparing;
+    # only a shared human actor warrants merging two adjacent sub-sessions.
+    human_left = left.triggers - {SYSTEM_TRIGGER}
+    human_right = right.triggers - {SYSTEM_TRIGGER}
+    if human_left & human_right:
         return True
 
     return False
@@ -539,9 +623,12 @@ def _canonical(session: _Session) -> _CanonicalSession:
     Convert a behavioural session into its canonical representation.
     """
 
+    # Fix B: normalise concurrent events before generating the signature so
+    # that jitter-caused ordering differences don't produce mirrored patterns.
+    normalized = _normalize_concurrent_events(session.events)
     signature = tuple(
         f"{event.device_id}:{event.action.value}"
-        for event in _compress_duplicates(session.events)
+        for event in _compress_duplicates(normalized)
     )[:MAX_SEQUENCE_LENGTH]
 
     return _CanonicalSession(
@@ -1629,6 +1716,16 @@ def _generate_patterns(
         # is empty — emitting it would produce a meaningless pattern with no
         # steps and a blank description, so skip the cluster entirely.
         if not stats["steps"]:
+            continue
+
+        # Fix C: a behavioral routine requires coordination across ≥2 physical
+        # devices.  A single-device ON→OFF cycle is a duration observation
+        # already captured by the duration engine; emitting it here would be
+        # double-counting.  This one check eliminates the entire class of
+        # "water_motor ON → water_motor OFF" false positives without touching
+        # the clustering logic.
+        distinct_devices = {step.split(":")[0] for step in stats["steps"]}
+        if len(distinct_devices) < MIN_DISTINCT_DEVICES:
             continue
 
         confidence = _pattern_confidence(
