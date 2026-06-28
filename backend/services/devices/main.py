@@ -1,4 +1,17 @@
-"""Device Control Microservice — Maps mood state to smart home environment adjustments."""
+"""Device Control / Ambient Intelligence Microservice.
+
+Two responsibilities:
+
+  1. (Legacy) Map a mood + cognitive load to a single-room environment preset.
+     Kept for backward-compatibility with the older flow.
+
+  2. (Ambient Intelligence) The ARBITER for the fixed H003 care home: take the
+     three observation sources — PATTERN (learned routine), MOOD (reactive
+     comfort) and SAFETY (protective override) — plus any MANUAL human overrides,
+     and resolve a single coherent directive per room using a deterministic
+     priority ladder. Nothing is persisted; every call is ephemeral, so the demo
+     data is never mutated no matter how much the home is poked at.
+"""
 import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
@@ -13,9 +26,12 @@ from services.devices.controller import (
     EnvironmentState,
     MOOD_PRESETS,
 )
+from services.devices import arbiter, scenario
 
-app = FastAPI(title="MoodSense — Device Control Service")
+app = FastAPI(title="MoodSense — Device Control & Ambient Intelligence")
 
+
+# ─── Legacy mood→environment endpoints ───────────────────────────────────────
 
 class EnvironmentRequest(BaseModel):
     mood: MoodState
@@ -56,20 +72,41 @@ async def get_presets():
     return {mood.value: preset for mood, preset in MOOD_PRESETS.items()}
 
 
-@app.get("/state/{room_id}")
-async def get_room_state(room_id: str):
-    """Get current environment state for a room (placeholder for IoT query)."""
-    return {
-        "room_id": room_id,
-        "status": "connected",
-        "last_adjustment": None,
-        "devices": {
-            "lights": {"online": True, "type": "smart_bulb"},
-            "speaker": {"online": True, "type": "echo"},
-            "thermostat": {"online": False, "type": "smart_thermostat"},
-        },
-    }
+# ─── Ambient Intelligence (H003 arbiter) ─────────────────────────────────────
 
+class ArbitrateRequest(BaseModel):
+    # Demo clock — drives the PATTERN routine schedule.
+    time: str | None = None
+    # Active reactive signals (0 or 1 each) — see GET /devices/scenario.
+    mood: str | None = None
+    safety: str | None = None
+    # Device-level human overrides {device_id: on/off}. Any room with an entry
+    # is handed to MANUAL until the frontend's override timer drops it.
+    manual: dict[str, bool] = {}
+
+
+@app.get("/scenario")
+async def get_scenario():
+    """The fixed H003 demo script: sources, signals, routines, guided beats."""
+    return scenario.scenario_payload()
+
+
+@app.post("/arbitrate")
+async def arbitrate_house(request: ArbitrateRequest):
+    """Resolve the whole H003 house for one moment — the heart of the page.
+
+    Deterministic: the same {time, mood, safety, manual} always yields the same
+    per-room decision, so the demo is fully explainable end-to-end.
+    """
+    return arbiter.arbitrate(
+        time=request.time,
+        mood=request.mood,
+        safety=request.safety,
+        manual=request.manual,
+    )
+
+
+# ─── Helpers ─────────────────────────────────────────────────────────────────
 
 def _build_device_commands(env: EnvironmentState, room_id: str) -> list[dict]:
     """Translate environment state into IoT device commands."""
