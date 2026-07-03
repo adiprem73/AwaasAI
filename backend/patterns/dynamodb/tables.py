@@ -66,6 +66,20 @@ def table_definitions() -> list[dict]:
             ],
             "BillingMode": "PAY_PER_REQUEST",
         },
+        {
+            # Temporary occasion-driven adjustments (guests, festivals) that
+            # overlay the learned patterns without mutating them.
+            "TableName": s.adjustments_table,
+            "KeySchema": [
+                {"AttributeName": "household_id", "KeyType": "HASH"},
+                {"AttributeName": "id", "KeyType": "RANGE"},
+            ],
+            "AttributeDefinitions": [
+                {"AttributeName": "household_id", "AttributeType": "S"},
+                {"AttributeName": "id", "AttributeType": "S"},
+            ],
+            "BillingMode": "PAY_PER_REQUEST",
+        },
     ]
 
 

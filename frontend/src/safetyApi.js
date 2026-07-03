@@ -66,6 +66,23 @@ export const safetyApi = {
 
   scenarios: () => request("/admin/scenarios"),
 
+  // ── Guardian: elderly-alone triage + check-in-before-alarm ────────────────
+  // Send the same dollhouse board; the Guardian runs the deterministic safety
+  // evaluation, then triages the raised concerns to the single most dangerous +
+  // relevant one and decides: raise the alarm now (extreme) or check in with the
+  // person first (less serious). Returns a GuardianDecision.
+  guardianAssess: (householdId, body) =>
+    request(`/guardian/${householdId}/assess`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  // Interpret the person's reply to a check-in → stand down or escalate.
+  guardianCheckin: (householdId, body) =>
+    request(`/guardian/${householdId}/checkin/respond`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+
   // Narrate each detected concern as its own spoken Alexa line (most-severe
   // first), so the dashboard can stack + read them one-by-one.
   narrateEach: (context) =>

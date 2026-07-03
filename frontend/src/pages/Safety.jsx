@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { safetyApi } from "../safetyApi.js";
 import AlexaNotification from "../components/patterns/AlexaNotification.jsx";
+import GuardianPanel from "../components/GuardianPanel.jsx";
 
 // ════════════════════════════════════════════════════════════════════════════
 //  ADAPTIVE SAFETY — "Living Dollhouse"
@@ -65,6 +66,20 @@ const ROSTER = [
 ];
 const ROSTER_BY_ID = Object.fromEntries(ROSTER.map((p) => [p.person_id, p]));
 
+// Activity sensors that carry a learned daily ACTIVE routine in E001's seeded
+// history. On any non-quiet board we emit a fresh "I'm alive" ping for EACH of
+// these so that merely scrubbing the demo clock past a routine's usual time can
+// never manufacture a phantom inactivity / missed-routine concern. Inactivity
+// must be a deliberate scenario (the "No movement" toggle), never a clock
+// artifact. (Previously only grandpa_activity was kept alive, so grandma — and
+// the kitchen/living sensors — falsely flagged as inactive on the default board.)
+const LIVENESS_SENSORS = [
+  "grandpa_activity",
+  "grandma_activity",
+  "kitchen_activity",
+  "living_activity",
+];
+
 const STATUS_META = {
   safe: { label: "Safe", color: "#22c55e", bg: "bg-emerald-500/15", ring: "ring-emerald-500/50", text: "text-emerald-300", emoji: "🟢" },
   inactive: { label: "Inactive", color: "#eab308", bg: "bg-yellow-500/15", ring: "ring-yellow-500/50", text: "text-yellow-300", emoji: "🟡" },
@@ -91,6 +106,7 @@ const VULN_META = {
 // One-click situations that POPULATE the live board (everything stays editable
 // afterwards — add/remove people, move the clock, toggle more devices).
 const QUICK = [
+  { key: "missed_med", label: "Missed medicine", emoji: "💊" },
   { key: "window_night", label: "Window open · night", emoji: "🌙" },
   { key: "gas_left_on", label: "Gas left on", emoji: "🔥" },
   { key: "sos", label: "SOS pressed", emoji: "🆘" },
@@ -194,9 +210,14 @@ export default function Safety() {
         toggleSignal("sos");
       } else if (key === "quiet") {
         toggleSignal("quiet");
+      } else if (key === "missed_med") {
+        // A less-serious concern the Guardian should CHECK IN about (not alarm):
+        // move to just after the morning medicine window and deliberately omit it.
+        if (!signals.has("missed_med")) setClock("10:30");
+        toggleSignal("missed_med");
       }
     },
-    [clock, turnDeviceOn, toggleSignal],
+    [clock, signals, turnDeviceOn, toggleSignal],
   );
 
   const resetBoard = useCallback(() => {
@@ -228,11 +249,16 @@ export default function Safety() {
 
     const sigArr = [];
     let ignore = false;
+    // Tie momentary signals to whoever is actually placed (prefer a wearable
+    // owner), so the alarm text names the right person — not a hard-coded one.
+    const watched =
+      [...placed].find((id) => ROSTER_BY_ID[id]?.wearable_id) || [...placed][0] || "grandma";
+    const wearable = ROSTER_BY_ID[watched]?.wearable_id || `${watched}_wearable`;
     if (signals.has("sos")) {
-      sigArr.push({ device_id: "grandpa_wearable", device_type: "wearable", room: "living_room", action: "SOS", triggered_by: "grandpa", minutes_ago: 2 });
+      sigArr.push({ device_id: wearable, device_type: "wearable", room: "living_room", action: "SOS", triggered_by: watched, minutes_ago: 2 });
     }
     if (signals.has("health")) {
-      sigArr.push({ device_id: "grandpa_wearable", device_type: "wearable", room: "bedroom", action: "ALERT", triggered_by: "grandpa", minutes_ago: 6, metadata: { signal: "heart_rate", value: 44, threshold: "<50 bpm" } });
+      sigArr.push({ device_id: wearable, device_type: "wearable", room: "bedroom", action: "ALERT", triggered_by: watched, minutes_ago: 6, metadata: { signal: "heart_rate", value: 44, threshold: "<50 bpm" } });
     }
     if (signals.has("quiet")) {
       // Ignore stored events so seeded routine pings don't count as life; the
@@ -241,12 +267,27 @@ export default function Safety() {
       sigArr.push({ device_id: "grandpa_activity", device_type: "activity", room: "bedroom", action: "ACTIVE", triggered_by: "grandpa", minutes_ago: 300 });
     } else {
       // Keep the home "alive": a fresh activity ping ~5 min before the demo
-      // clock. Without this, scrubbing the clock forward (e.g. to 23:00 for the
-      // window-at-night demo) would make the seeded last-activity look hours old
-      // and trigger a phantom global-inactivity emergency. Inactivity should be
-      // a deliberate scenario (the "No movement" toggle), never a clock artifact.
-      sigArr.push({ device_id: "grandpa_activity", device_type: "activity", room: "bedroom", action: "ACTIVE", triggered_by: "grandpa", minutes_ago: 5 });
+      // clock for EVERY sensor with a learned routine. Without this, scrubbing
+      // the clock forward (e.g. to 23:00 for the window-at-night demo) makes the
+      // seeded last-activity look hours old and manufactures phantom inactivity /
+      // missed-routine concerns — most visibly "no activity from grandma" right
+      // on first load. Inactivity should be a deliberate scenario (the "No
+      // movement" toggle), never a clock artifact.
+      LIVENESS_SENSORS.forEach((id) => {
+        sigArr.push({
+          device_id: id,
+          device_type: "activity",
+          room: DEVICE_META[id]?.room || "home",
+          action: "ACTIVE",
+          triggered_by: "system",
+          minutes_ago: 5,
+        });
+      });
     }
+
+    // Deliberately-missed routines (so the Guardian has something to check in on).
+    const skip_completions = [];
+    if (signals.has("missed_med")) skip_completions.push("grandma_medicine", "grandpa_medicine");
 
     return {
       current_time: clock || undefined,
@@ -256,6 +297,11 @@ export default function Safety() {
       profiles,
       signals: sigArr,
       ignore_stored_events: ignore,
+      // Keep the home CALM by default: treat today's routines-so-far as done,
+      // so nothing flags unless the user creates a situation. Turned OFF for the
+      // "No movement" demo (which deliberately wants an inactivity gap).
+      healthy_baseline: !signals.has("quiet"),
+      skip_completions,
     };
   }, [placed, signals, clock, activeDevices, deviceOnSince]);
 
@@ -471,6 +517,7 @@ export default function Safety() {
               const on =
                 (q.key === "sos" && signals.has("sos")) ||
                 (q.key === "quiet" && signals.has("quiet")) ||
+                (q.key === "missed_med" && signals.has("missed_med")) ||
                 (q.key === "window_night" && activeDevices.has("bedroom_window")) ||
                 (q.key === "gas_left_on" && activeDevices.has("kitchen_gas_stove"));
               return (
@@ -527,6 +574,9 @@ export default function Safety() {
           </div>
         </div>
       </section>
+
+      {/* The Guardian — elderly-alone triage + check-in-before-alarm */}
+      <GuardianPanel hid={HID} boardKey={boardKey} buildRequest={buildRequest} />
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_380px]">
         {/* Left: floor plan */}

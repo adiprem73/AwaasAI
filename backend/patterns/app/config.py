@@ -31,6 +31,8 @@ class Settings(BaseSettings):
     events_table: str = "SmartHome_Events"
     state_table: str = "SmartHome_HouseholdState"
     patterns_table: str = "SmartHome_Patterns"
+    # Temporary, user-driven pattern adjustments (guests / festivals) overlay.
+    adjustments_table: str = "SmartHome_ContextAdjustments"
 
     # --- Pattern engine tuning ---
     # How many days of history the extraction job analyses.
@@ -83,6 +85,17 @@ class Settings(BaseSettings):
 
     # Hard ceiling on the LLM call so a slow/unreachable API never blocks the UI.
     narrator_timeout_seconds: float = 12.0
+
+    # --- Gemini (audio understanding for the ambient "ear") ---
+    # An audio-native multimodal model that listens to a short mic clip and
+    # identifies ANY household sound in open vocabulary (a text LLM cannot hear).
+    # Free Google AI Studio tier — set GEMINI_API_KEY in backend/.env.
+    gemini_api_key: str = ""
+    # 2.5-flash is audio-capable and has free-tier quota where 2.0-flash may show
+    # limit:0 for some projects/regions. Override with GEMINI_MODEL if needed.
+    gemini_model: str = "gemini-2.5-flash"
+    gemini_base_url: str = "https://generativelanguage.googleapis.com/v1beta"
+    gemini_timeout_seconds: float = 20.0
 
 
 @lru_cache

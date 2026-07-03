@@ -107,6 +107,17 @@ export const HOUSEHOLDS = {
       { id: "front_door", label: "Front Door", type: "door", room: "entrance" },
     ],
   },
+  H004: {
+    label: "H004 · Context-Aware Home ✨",
+    people: ["father", "mother"],
+    devices: [
+      { id: "living_room_ac", label: "Living AC", type: "ac", room: "living_room" },
+      { id: "bedroom_ac", label: "Bedroom AC", type: "ac", room: "bedroom" },
+      { id: "porch_light", label: "Porch Light", type: "light", room: "porch" },
+      { id: "water_motor", label: "Water Motor", type: "motor", room: "utility" },
+      { id: "mother_presence", label: "Mother", type: "presence", room: "entrance" },
+    ],
+  },
   H003: {
     label: "H003 · Indian-Context Care Home",
     people: ["grandpa", "grandma", "father", "mother", "son", "ananya", "maid"],

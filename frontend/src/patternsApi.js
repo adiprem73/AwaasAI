@@ -68,6 +68,22 @@ export const api = {
       body: JSON.stringify(context),
     }),
 
+  // LLM-generated, deterministically-verified CONTEXT-CONDITIONAL patterns.
+  // The LLM proposes rules ("AC only on hot days"); the backend re-measures each
+  // against real history and returns only the ones the data supports. `ctx` is
+  // the live house context (temperature, weekend, who's home) used to flag which
+  // conditional patterns apply right now. Returns a ContextualResponse.
+  contextual: (householdId, ctx = {}) =>
+    request(`/patterns/${householdId}/contextual`, {
+      method: "POST",
+      body: JSON.stringify({
+        temperature_c: ctx.temperatureC ?? null,
+        is_weekend: ctx.isWeekend ?? null,
+        occupants: ctx.occupants || [],
+        at: ctx.at || null,
+      }),
+    }),
+
 
   // Fetch events for a household. With no options it returns the full
   // chronological history (the backend paginates); pass { since, limit } to
@@ -84,6 +100,56 @@ export const api = {
 
   seed: (householdId) =>
     request(`/admin/seed/${householdId}`, { method: "POST" }),
+
+  // ── Ambient sound understanding (the household "ear") ──────────────────────
+  // The browser classifies mic audio locally (MediaPipe YAMNet); these endpoints
+  // interpret a detected sound, learn sound-routines, and expose the taxonomy.
+  ambientSounds: () => request(`/ambient/sounds`),
+  ambientObserve: (householdId, body) =>
+    request(`/ambient/${householdId}/observe`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  ambientRoutines: (householdId) => request(`/ambient/${householdId}/routines`),
+
+  // ── User context notes → temporary pattern adjustments (guests / festivals) ─
+  // Speak/type an occasion; the LLM previews adjustments; apply persists them as
+  // a reversible overlay on the learned patterns.
+  contextNote: (householdId, { text, audioBase64, audioFormat } = {}) =>
+    request(`/context/${householdId}/note`, {
+      method: "POST",
+      body: JSON.stringify({
+        text: text || null,
+        audio_base64: audioBase64 || null,
+        audio_format: audioFormat || "webm",
+      }),
+    }),
+  applyContextPlan: (householdId, plan) =>
+    request(`/context/${householdId}/note/apply`, {
+      method: "POST",
+      body: JSON.stringify({
+        occasion: plan.occasion || "",
+        occasion_date: plan.occasion_date || "",
+        summary: plan.summary || "",
+        adjustments: plan.adjustments || [],
+      }),
+    }),
+  getAdjustments: (householdId) => request(`/context/${householdId}/adjustments`),
+  deleteAdjustment: (householdId, id) =>
+    request(`/context/${householdId}/adjustments/${id}`, { method: "DELETE" }),
+  clearAdjustments: (householdId) =>
+    request(`/context/${householdId}/adjustments`, { method: "DELETE" }),
+  // The learned daily routine with the active occasion overlay applied.
+  effectiveSchedule: (householdId) =>
+    request(`/context/${householdId}/effective-schedule`),
+  // Send a recorded mic clip to the audio LLM (Gemini) for open-vocab detection.
+  ambientListen: (householdId, body) =>
+    request(`/ambient/${householdId}/listen`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  ambientSeed: (householdId) =>
+    request(`/ambient/${householdId}/seed`, { method: "POST" }),
 };
 
 export { BASE as API_BASE };

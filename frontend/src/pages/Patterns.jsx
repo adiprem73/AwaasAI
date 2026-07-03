@@ -4,6 +4,9 @@ import TopBar from "../components/patterns/TopBar.jsx";
 import HouseFloor from "../components/patterns/HouseFloor.jsx";
 import SidePanel from "../components/patterns/SidePanel.jsx";
 import AlexaNotification from "../components/patterns/AlexaNotification.jsx";
+import ContextualPatterns from "../components/patterns/ContextualPatterns.jsx";
+import ContextNotes from "../components/patterns/ContextNotes.jsx";
+import AdjustedRoutine from "../components/patterns/AdjustedRoutine.jsx";
 
 function nowHHMM() {
   const d = new Date();
@@ -12,6 +15,8 @@ function nowHHMM() {
 
 export default function Patterns() {
   const [householdId, setHouseholdId] = useState("H001");
+  // Bumped whenever the occasion overlay changes, so the adapted routine refetches.
+  const [overlayVersion, setOverlayVersion] = useState(0);
   const [simTime, setSimTime] = useState(nowHHMM());
   const [state, setState] = useState(null);
   const [patterns, setPatterns] = useState(null);
@@ -171,6 +176,8 @@ export default function Patterns() {
       // After loading demo data, return to the clean all-off slate so the user
       // starts the simulation themselves.
       await loadAll(householdId);
+      // New patterns exist → refresh the adapted-routine + context panels.
+      setOverlayVersion((v) => v + 1);
     } catch (e) {
       flash(`Seed failed: ${e.message}`, false);
     } finally {
@@ -203,6 +210,17 @@ export default function Patterns() {
             busy={busy}
           />
           <Legend dirty={dirty} />
+          <ContextNotes
+            householdId={householdId}
+            refreshKey={overlayVersion}
+            onOverlayChange={() => setOverlayVersion((v) => v + 1)}
+          />
+          <AdjustedRoutine
+            householdId={householdId}
+            refreshKey={overlayVersion}
+            onOverlayChange={() => setOverlayVersion((v) => v + 1)}
+          />
+          <ContextualPatterns householdId={householdId} />
         </main>
 
         <SidePanel

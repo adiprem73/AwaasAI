@@ -17,7 +17,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from safety.app.config import get_settings
-from safety.routes import admin, context, events, patterns, safety, state
+from safety.routes import admin, context, events, guardian, patterns, safety, state
 
 logger = logging.getLogger(__name__)
 
@@ -118,6 +118,7 @@ def create_app() -> FastAPI:
     app.include_router(patterns.router)
     app.include_router(context.router)
     app.include_router(safety.router)
+    app.include_router(guardian.router)
     app.include_router(admin.router)
     return app
 

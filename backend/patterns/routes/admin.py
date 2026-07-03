@@ -20,6 +20,7 @@ _SCENARIOS = {
     "H001": "son_departure",
     "H002": "ac_motor_light",
     "H003": "indian_context_care",
+    "H004": "context_conditional",
 }
 
 
@@ -34,6 +35,10 @@ def _generate(household_id: str):
         return generate(days=30)
     if household_id == "H003":
         from patterns.tests.sample_data_h003 import generate
+
+        return generate(days=30)
+    if household_id == "H004":
+        from patterns.tests.sample_data_h004 import generate
 
         return generate(days=30)
     raise HTTPException(status_code=404, detail=f"Unknown scenario: {household_id}")

@@ -111,6 +111,18 @@ class EvaluateStateRequest(BaseModel):
             "signs of life."
         ),
     )
+    healthy_baseline: bool = Field(
+        False,
+        description=(
+            "Treat today's routines-so-far as done → the home stays CALM unless "
+            "the user deliberately creates a situation. Prevents phantom "
+            "'missed routine' flags from the passing demo clock."
+        ),
+    )
+    skip_completions: list[str] = Field(
+        default_factory=list,
+        description="Device ids whose routine is deliberately MISSED (e.g. ['grandma_medicine']).",
+    )
 
 
 def _resolve_now(at: str | None) -> datetime | None:
@@ -185,6 +197,8 @@ def evaluate_context(
         profiles=body.profiles,
         extra_recent=extra_recent,
         ignore_stored_events=body.ignore_stored_events,
+        healthy_baseline=body.healthy_baseline,
+        skip_completions=body.skip_completions,
     )
 
 
